@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "inkedalex.workspaces-preview",
+  "name": "Workspaces Preview",
+  "version": "1.0.0",
+  "author": "Alex Weström",
+  "description": "Omarchy workspaces widget that displays an instant hover preview of all open windows in each workspace.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Workspaces Preview",
+    "description": "Shows workspaces with open window title preview on hover.",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
