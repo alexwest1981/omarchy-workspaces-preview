@@ -16,13 +16,7 @@ A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprlan
 * **Auto-Workspace Switching:** Instantly switches to the target workspace and brings the selected window into focus.
 * **Rich Visuals:** Displays workspace badges, application Nerd Font icons, and window titles in a sleek floating modal.
 
-```text
-[Workspace 1]  󰞷  Ghostty         │  btop
-[Workspace 2]    Zoom            │  Daily Standup Meeting
-[Workspace 5]  󰈹  Brave           │  GitHub - omarchy-workspaces-preview
-[Workspace 5]  󰙯  Discord         │  #plugins - Omarchy
-[Workspace 6]  󰘐  Antigravity IDE │  workspace-preview - BarWidget.qml
-```
+![Window Picker](https://raw.githubusercontent.com/alexwest1981/omarchy-workspaces-preview/main/picker-screenshot.png)
 
 ---
 
