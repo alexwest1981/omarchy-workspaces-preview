@@ -25,7 +25,7 @@ CONFIG_FILE="$CONFIG_DIR/workspaces-picker.json"
 
 mkdir -p "$CONFIG_DIR"
 if [[ ! -f "$CONFIG_FILE" ]]; then
-  echo '{"theme":"system","border":"rounded","size":"standard","show_icons":true}' > "$CONFIG_FILE"
+  echo '{"theme":"system","border":"rounded","size":"standard"}' > "$CONFIG_FILE"
 fi
 
 get_cfg() {
@@ -44,7 +44,7 @@ set_cfg() {
   local key="$1"
   local val="$2"
   local tmp
-  tmp=$(jq --arg k "$key" --arg v "$val" '.[$k] = ($v | if . == "true" then true elif . == "false" then false else . end)' "$CONFIG_FILE")
+  tmp=$(jq --arg k "$key" --arg v "$val" '.[$k] = $v' "$CONFIG_FILE")
   echo "$tmp" > "$CONFIG_FILE"
 }
 
@@ -82,16 +82,6 @@ cycle_size() {
     compact) set_cfg "size" "spacious" ;;
     *) set_cfg "size" "standard" ;;
   esac
-}
-
-toggle_icons() {
-  local current
-  current=$(get_cfg "show_icons" "true")
-  if [[ "$current" == "true" ]]; then
-    set_cfg "show_icons" "false"
-  else
-    set_cfg "show_icons" "true"
-  fi
 }
 
 get_theme_colors() {
@@ -194,13 +184,11 @@ while true; do
   THEME=$(get_cfg "theme" "system")
   BORDER=$(get_cfg "border" "rounded")
   SIZE=$(get_cfg "size" "standard")
-  SHOW_ICONS=$(get_cfg "show_icons" "true")
 
   COLOR_SPEC=$(get_theme_colors "$THEME")
   THEME_LBL=$(format_theme_label "$THEME")
   BORDER_LBL=$(format_border_label "$BORDER")
   SIZE_LBL=$(format_size_label "$SIZE")
-  ICONS_LBL=$([[ "$SHOW_ICONS" == "true" ]] && echo "ON" || echo "OFF")
 
   # Size / Layout parameters
   case "$SIZE" in
@@ -235,12 +223,7 @@ while true; do
   ' | while IFS=$'\t' read -r ws_id class title address; do
       [[ -z "$address" ]] && continue
       
-      if [[ "$SHOW_ICONS" == "true" ]]; then
-        icon=" $(get_icon "$class") "
-      else
-        icon=" "
-      fi
-      
+      icon=" $(get_icon "$class") "
       app_clean=$(echo "$class" | sed -E 's/^com\.[^.]+\.//; s/^org\.[^.]+\.//; s/-Default$//; s/^brave-app\./App: /')
       
       if [[ "$ws_id" -lt 0 ]]; then
@@ -258,7 +241,7 @@ while true; do
     exit 0
   fi
 
-  FOOTER_TEXT=" 🎨 Theme (Ctrl+T): $THEME_LBL  │  🖼️ Border (Ctrl+B): $BORDER_LBL  │  📐 Size (Ctrl+S): $SIZE_LBL  │  ✨ Icons (Alt+I / Ctrl+O): $ICONS_LBL"
+  FOOTER_TEXT=" 🎨 Theme (Ctrl+T): $THEME_LBL  │  🖼️ Border (Ctrl+B): $BORDER_LBL  │  📐 Size (Ctrl+S): $SIZE_LBL"
 
   # Run fzf with expectation on shortcut keys
   fzf_output=$(echo "$items" | fzf \
@@ -275,7 +258,7 @@ while true; do
     --color="$COLOR_SPEC" \
     --query="$query" \
     --print-query \
-    --expect=ctrl-t,alt-t,ctrl-b,alt-b,ctrl-s,alt-s,ctrl-o,alt-i \
+    --expect=ctrl-t,alt-t,ctrl-b,alt-b,ctrl-s,alt-s \
     --info=inline || true)
 
   if [[ -z "$fzf_output" ]]; then
@@ -298,10 +281,6 @@ while true; do
       ;;
     ctrl-s|alt-s)
       cycle_size
-      continue
-      ;;
-    ctrl-o|alt-i)
-      toggle_icons
       continue
       ;;
     "")

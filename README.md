@@ -23,7 +23,6 @@ Customizable directly from the bottom footer of the window picker without leavin
 * `Ctrl + T` – **Theme:** *Based on System (Auto)*, *Tokyo Night*, *Catppuccin Mocha*, *Nord*, *Gruvbox*, *Cyberpunk*, *Monochrome*.
 * `Ctrl + B` – **Borders & Corners:** *Rounded*, *Sharp*, *Double*, *Bold*, *None*.
 * `Ctrl + S` – **Size & Margins:** *Standard*, *Compact*, *Spacious*.
-* `Alt + I` (or `Ctrl + O`) – **Icons:** Toggle application Nerd Font icons on/off.
 
 Preferences are automatically remembered in `~/.config/omarchy/workspaces-picker.json`.
 
