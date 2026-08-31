@@ -258,7 +258,7 @@ while true; do
     exit 0
   fi
 
-  FOOTER_TEXT=" 🎨 Theme (Ctrl+T): $THEME_LBL  │  🖼️ Border (Ctrl+B): $BORDER_LBL  │  📐 Size (Ctrl+S): $SIZE_LBL  │  ✨ Icons (Ctrl+I): $ICONS_LBL"
+  FOOTER_TEXT=" 🎨 Theme (Ctrl+T): $THEME_LBL  │  🖼️ Border (Ctrl+B): $BORDER_LBL  │  📐 Size (Ctrl+S): $SIZE_LBL  │  ✨ Icons (Alt+I / Ctrl+O): $ICONS_LBL"
 
   # Run fzf with expectation on shortcut keys
   fzf_output=$(echo "$items" | fzf \
@@ -275,7 +275,7 @@ while true; do
     --color="$COLOR_SPEC" \
     --query="$query" \
     --print-query \
-    --expect=ctrl-t,ctrl-b,ctrl-s,ctrl-i \
+    --expect=ctrl-t,alt-t,ctrl-b,alt-b,ctrl-s,alt-s,ctrl-o,alt-i \
     --info=inline || true)
 
   if [[ -z "$fzf_output" ]]; then
@@ -288,19 +288,19 @@ while true; do
   selected=$(echo "$fzf_output" | sed -n '3p')
 
   case "$key" in
-    ctrl-t)
+    ctrl-t|alt-t)
       cycle_theme
       continue
       ;;
-    ctrl-b)
+    ctrl-b|alt-b)
       cycle_border
       continue
       ;;
-    ctrl-s)
+    ctrl-s|alt-s)
       cycle_size
       continue
       ;;
-    ctrl-i)
+    ctrl-o|alt-i)
       toggle_icons
       continue
       ;;
