@@ -19,7 +19,158 @@ command -v hyprctl >/dev/null 2>&1 || { echo "Error: hyprctl is required" >&2; e
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 command -v fzf >/dev/null 2>&1 || { echo "Error: fzf is required" >&2; exit 1; }
 
-# Helper: Map application class to a friendly Nerd Font icon
+# Configuration management
+CONFIG_DIR="$HOME/.config/omarchy"
+CONFIG_FILE="$CONFIG_DIR/workspaces-picker.json"
+
+mkdir -p "$CONFIG_DIR"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo '{"theme":"system","border":"rounded","size":"standard","show_icons":true}' > "$CONFIG_FILE"
+fi
+
+get_cfg() {
+  local key="$1"
+  local default="$2"
+  local val
+  val=$(jq -r ".$key // empty" "$CONFIG_FILE" 2>/dev/null || echo "")
+  if [[ -z "$val" || "$val" == "null" ]]; then
+    echo "$default"
+  else
+    echo "$val"
+  fi
+}
+
+set_cfg() {
+  local key="$1"
+  local val="$2"
+  local tmp
+  tmp=$(jq --arg k "$key" --arg v "$val" '.[$k] = ($v | if . == "true" then true elif . == "false" then false else . end)' "$CONFIG_FILE")
+  echo "$tmp" > "$CONFIG_FILE"
+}
+
+cycle_theme() {
+  local current
+  current=$(get_cfg "theme" "system")
+  case "$current" in
+    system) set_cfg "theme" "tokyo-night" ;;
+    tokyo-night) set_cfg "theme" "catppuccin" ;;
+    catppuccin) set_cfg "theme" "nord" ;;
+    nord) set_cfg "theme" "gruvbox" ;;
+    gruvbox) set_cfg "theme" "cyberpunk" ;;
+    cyberpunk) set_cfg "theme" "monochrome" ;;
+    *) set_cfg "theme" "system" ;;
+  esac
+}
+
+cycle_border() {
+  local current
+  current=$(get_cfg "border" "rounded")
+  case "$current" in
+    rounded) set_cfg "border" "sharp" ;;
+    sharp) set_cfg "border" "double" ;;
+    double) set_cfg "border" "bold" ;;
+    bold) set_cfg "border" "none" ;;
+    *) set_cfg "border" "rounded" ;;
+  esac
+}
+
+cycle_size() {
+  local current
+  current=$(get_cfg "size" "standard")
+  case "$current" in
+    standard) set_cfg "size" "compact" ;;
+    compact) set_cfg "size" "spacious" ;;
+    *) set_cfg "size" "standard" ;;
+  esac
+}
+
+toggle_icons() {
+  local current
+  current=$(get_cfg "show_icons" "true")
+  if [[ "$current" == "true" ]]; then
+    set_cfg "show_icons" "false"
+  else
+    set_cfg "show_icons" "true"
+  fi
+}
+
+get_theme_colors() {
+  local theme="$1"
+  case "$theme" in
+    system)
+      local theme_name
+      theme_name=$(omarchy-theme-current 2>/dev/null || echo "tokyo-night")
+      local slug
+      slug=$(echo "$theme_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+      local colors_file="/usr/share/omarchy/themes/$slug/colors.toml"
+      local accent="#7aa2f7" bg="#1a1b26" fg="#a9b1d6" selection="#292e42" yellow="#e0af68" cyan="#7dcfff"
+      if [[ -f "$colors_file" ]]; then
+        accent=$(grep '^accent *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$accent")
+        bg=$(grep '^background *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$bg")
+        fg=$(grep '^foreground *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$fg")
+        selection=$(grep '^selection *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$selection")
+        yellow=$(grep '^yellow *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$yellow")
+        cyan=$(grep '^cyan *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$cyan")
+      fi
+      echo "bg:$bg,fg:$fg,hl:$yellow,bg+:$selection,fg+:$fg,hl+:$yellow,border:$accent,prompt:$cyan,pointer:$accent,header:$accent,info:$cyan,footer:$accent"
+      ;;
+    tokyo-night)
+      echo "bg:#1a1b26,fg:#a9b1d6,hl:#e0af68,bg+:#292e42,fg+:#c0caf5,hl+:#e0af68,border:#7aa2f7,prompt:#7dcfff,pointer:#7aa2f7,header:#7aa2f7,info:#7dcfff,footer:#7aa2f7"
+      ;;
+    catppuccin)
+      echo "bg:#1e1e2e,fg:#cdd6f4,hl:#f9e2af,bg+:#313244,fg+:#cdd6f4,hl+:#f9e2af,border:#89b4fa,prompt:#89dceb,pointer:#f5c2e7,header:#cba6f7,info:#89dceb,footer:#89b4fa"
+      ;;
+    nord)
+      echo "bg:#2e3440,fg:#eceff4,hl:#ebcb8b,bg+:#3b4252,fg+:#eceff4,hl+:#ebcb8b,border:#88c0d0,prompt:#81a1c1,pointer:#88c0d0,header:#88c0d0,info:#81a1c1,footer:#88c0d0"
+      ;;
+    gruvbox)
+      echo "bg:#282828,fg:#ebdbb2,hl:#fabd2f,bg+:#3c3836,fg+:#ebdbb2,hl+:#fabd2f,border:#fe8019,prompt:#8ec07c,pointer:#fe8019,header:#fabd2f,info:#8ec07c,footer:#fe8019"
+      ;;
+    cyberpunk)
+      echo "bg:#000b1e,fg:#00ffff,hl:#ff0055,bg+:#0d1b2a,fg+:#00ffff,hl+:#ff0055,border:#ff007f,prompt:#00ff9f,pointer:#ff007f,header:#00ff9f,info:#00ff9f,footer:#ff007f"
+      ;;
+    monochrome)
+      echo "bg:#121212,fg:#ffffff,hl:#aaaaaa,bg+:#262626,fg+:#ffffff,hl+:#ffffff,border:#777777,prompt:#ffffff,pointer:#ffffff,header:#ffffff,info:#aaaaaa,footer:#777777"
+      ;;
+    *)
+      echo "border:blue,prompt:cyan,pointer:magenta,hl:yellow,hl+:yellow"
+      ;;
+  esac
+}
+
+format_theme_label() {
+  case "$1" in
+    system) echo "Based on System" ;;
+    tokyo-night) echo "Tokyo Night" ;;
+    catppuccin) echo "Catppuccin" ;;
+    nord) echo "Nord" ;;
+    gruvbox) echo "Gruvbox" ;;
+    cyberpunk) echo "Cyberpunk" ;;
+    monochrome) echo "Monochrome" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+format_border_label() {
+  case "$1" in
+    rounded) echo "Rounded" ;;
+    sharp) echo "Sharp" ;;
+    double) echo "Double" ;;
+    bold) echo "Bold" ;;
+    none) echo "None" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+format_size_label() {
+  case "$1" in
+    compact) echo "Compact" ;;
+    standard) echo "Standard" ;;
+    spacious) echo "Spacious" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 get_icon() {
   case "${1,,}" in
     *ghostty*|*terminal*|*alacritty*|*kitty*|*foot*) echo "󰞷" ;;
@@ -37,67 +188,134 @@ get_icon() {
   esac
 }
 
-# Fetch open windows from Hyprland IPC
-clients_json=$(hyprctl clients -j 2>/dev/null || echo "[]")
+query=""
 
-count=$(echo "$clients_json" | jq '. | length')
-if [[ "$count" -eq 0 ]]; then
-  echo "No active windows found."
-  exit 0
-fi
+while true; do
+  THEME=$(get_cfg "theme" "system")
+  BORDER=$(get_cfg "border" "rounded")
+  SIZE=$(get_cfg "size" "standard")
+  SHOW_ICONS=$(get_cfg "show_icons" "true")
 
-# Build formatted list grouped by workspace
-items=$(echo "$clients_json" | jq -r '
-  .[]
-  | select(.mapped == true and .hidden == false and .class != "TUI.float" and .initialClass != "TUI.float" and (.title | test("omarchy-workspaces-picker"; "i") | not))
-  | [
-      (.workspace.id | tostring),
-      .class,
-      .title,
-      .address
-    ]
-  | @tsv
-' | while IFS=$'\t' read -r ws_id class title address; do
-    [[ -z "$address" ]] && continue
-    icon=$(get_icon "$class")
-    
-    # Clean app name for readability
-    app_clean=$(echo "$class" | sed -E 's/^com\.[^.]+\.//; s/^org\.[^.]+\.//; s/-Default$//; s/^brave-app\./App: /')
-    
-    # Workspace label formatting
-    if [[ "$ws_id" -lt 0 ]]; then
-      ws_label="Special"
-    else
-      ws_label="Workspace $ws_id"
-    fi
+  COLOR_SPEC=$(get_theme_colors "$THEME")
+  THEME_LBL=$(format_theme_label "$THEME")
+  BORDER_LBL=$(format_border_label "$BORDER")
+  SIZE_LBL=$(format_size_label "$SIZE")
+  ICONS_LBL=$([[ "$SHOW_ICONS" == "true" ]] && echo "ON" || echo "OFF")
 
-    # Print tab-delimited: DisplayLine \t Address
-    printf "%-15.15s  %s  %-20.20s  │  %s\t%s\n" \
-      "[$ws_label]" "$icon" "$app_clean" "$title" "$address"
-done | sort -V -k1,1)
+  # Size / Layout parameters
+  case "$SIZE" in
+    compact)
+      MARGIN="0,0"
+      PADDING="0"
+      ;;
+    spacious)
+      MARGIN="2,4"
+      PADDING="1,2"
+      ;;
+    *)
+      MARGIN="1,2"
+      PADDING="1"
+      ;;
+  esac
 
-if [[ -z "$items" ]]; then
-  echo "No active windows available."
-  exit 0
-fi
+  # Fetch open windows from Hyprland IPC
+  clients_json=$(hyprctl clients -j 2>/dev/null || echo "[]")
 
-# Launch fzf in floating/interactive picker mode
-selected=$(echo "$items" | fzf \
-  --delimiter=$'\t' \
-  --with-nth=1 \
-  --prompt="  Search windows > " \
-  --header="  Workspaces & Windows (Enter: Jump to window, Esc: Cancel)" \
-  --reverse \
-  --cycle \
-  --border=rounded \
-  --margin=1,2 \
-  --padding=1 \
-  --info=inline || true)
+  # Build formatted list grouped by workspace
+  items=$(echo "$clients_json" | jq -r '
+    .[]
+    | select(.mapped == true and .hidden == false and .class != "TUI.float" and .initialClass != "TUI.float" and (.title | test("omarchy-workspaces-picker"; "i") | not))
+    | [
+        (.workspace.id | tostring),
+        .class,
+        .title,
+        .address
+      ]
+    | @tsv
+  ' | while IFS=$'\t' read -r ws_id class title address; do
+      [[ -z "$address" ]] && continue
+      
+      if [[ "$SHOW_ICONS" == "true" ]]; then
+        icon=" $(get_icon "$class") "
+      else
+        icon=" "
+      fi
+      
+      app_clean=$(echo "$class" | sed -E 's/^com\.[^.]+\.//; s/^org\.[^.]+\.//; s/-Default$//; s/^brave-app\./App: /')
+      
+      if [[ "$ws_id" -lt 0 ]]; then
+        ws_label="Special"
+      else
+        ws_label="Workspace $ws_id"
+      fi
 
-# If a window was selected, focus it immediately
-if [[ -n "$selected" ]]; then
-  address=$(echo "$selected" | awk -F'\t' '{print $2}')
-  if [[ -n "$address" ]]; then
-    hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1
+      printf "%-15.15s %s %-20.20s  │  %s\t%s\n" \
+        "[$ws_label]" "$icon" "$app_clean" "$title" "$address"
+  done | sort -V -k1,1)
+
+  if [[ -z "$items" ]]; then
+    echo "No active windows available."
+    exit 0
   fi
-fi
+
+  FOOTER_TEXT=" 🎨 Theme (Ctrl+T): $THEME_LBL  │  🖼️ Border (Ctrl+B): $BORDER_LBL  │  📐 Size (Ctrl+S): $SIZE_LBL  │  ✨ Icons (Ctrl+I): $ICONS_LBL"
+
+  # Run fzf with expectation on shortcut keys
+  fzf_output=$(echo "$items" | fzf \
+    --delimiter=$'\t' \
+    --with-nth=1 \
+    --prompt="  Search windows > " \
+    --header="  Workspaces & Windows (Enter: Jump, Esc: Cancel)" \
+    --footer="$FOOTER_TEXT" \
+    --reverse \
+    --cycle \
+    --border="$BORDER" \
+    --margin="$MARGIN" \
+    --padding="$PADDING" \
+    --color="$COLOR_SPEC" \
+    --query="$query" \
+    --print-query \
+    --expect=ctrl-t,ctrl-b,ctrl-s,ctrl-i \
+    --info=inline || true)
+
+  if [[ -z "$fzf_output" ]]; then
+    break
+  fi
+
+  # Read fzf response
+  query=$(echo "$fzf_output" | head -n 1)
+  key=$(echo "$fzf_output" | sed -n '2p')
+  selected=$(echo "$fzf_output" | sed -n '3p')
+
+  case "$key" in
+    ctrl-t)
+      cycle_theme
+      continue
+      ;;
+    ctrl-b)
+      cycle_border
+      continue
+      ;;
+    ctrl-s)
+      cycle_size
+      continue
+      ;;
+    ctrl-i)
+      toggle_icons
+      continue
+      ;;
+    "")
+      # Enter was pressed on a selected window
+      if [[ -n "$selected" ]]; then
+        address=$(echo "$selected" | awk -F'\t' '{print $2}')
+        if [[ -n "$address" ]]; then
+          hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1
+        fi
+      fi
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
