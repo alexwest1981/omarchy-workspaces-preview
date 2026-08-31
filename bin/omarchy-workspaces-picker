@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# omarchy-workspaces-picker
+# Global fuzzy window & workspace switcher for Omarchy / Hyprland
+#
+# Part of the Omarchy Workspaces Preview Plugin
+# https://github.com/alexwest1981/omarchy-workspaces-preview
+# ==============================================================================
+
+set -euo pipefail
+
+# If launched outside a terminal (e.g. from Hyprland keybinding), re-launch inside a floating TUI window
+if [ ! -t 0 ]; then
+  exec omarchy-launch-tui --app-id=TUI.float "$0" "$@"
+fi
+
+# Ensure required commands are available
+command -v hyprctl >/dev/null 2>&1 || { echo "Error: hyprctl is required" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
+command -v fzf >/dev/null 2>&1 || { echo "Error: fzf is required" >&2; exit 1; }
+
+# Helper: Map application class to a friendly Nerd Font icon
+get_icon() {
+  case "${1,,}" in
+    *ghostty*|*terminal*|*alacritty*|*kitty*|*foot*) echo "󰞷" ;;
+    *brave*|*chrome*|*chromium*|*firefox*|*zen*|*browser*) echo "󰈹" ;;
+    *discord*|*vesktop*) echo "󰙯" ;;
+    *antigravity*|*code*|*cursor*|*nvim*|*vim*|*idea*|*editor*) echo "󰘐" ;;
+    *obsidian*|*notes*) echo "󰎞" ;;
+    *spotify*|*music*|*cliamp*) echo "󰓇" ;;
+    *nautilus*|*thunar*|*files*) echo "" ;;
+    *zoom*|*meet*) echo "" ;;
+    *signal*|*telegram*|*whatsapp*|*slack*) echo "󰍡" ;;
+    *godot*|*unity*|*unreal*) echo "" ;;
+    *gimp*|*inkscape*|*blender*|*krita*) echo "" ;;
+    *) echo "" ;;
+  esac
+}
+
+# Fetch open windows from Hyprland IPC
+clients_json=$(hyprctl clients -j 2>/dev/null || echo "[]")
+
+count=$(echo "$clients_json" | jq '. | length')
+if [[ "$count" -eq 0 ]]; then
+  echo "No active windows found."
+  exit 0
+fi
+
+# Build formatted list grouped by workspace
+items=$(echo "$clients_json" | jq -r '
+  .[]
+  | select(.mapped == true and .hidden == false)
+  | [
+      (.workspace.id | tostring),
+      .class,
+      .title,
+      .address
+    ]
+  | @tsv
+' | while IFS=$'\t' read -r ws_id class title address; do
+    [[ -z "$address" ]] && continue
+    icon=$(get_icon "$class")
+    
+    # Clean app name for readability
+    app_clean=$(echo "$class" | sed -E 's/^com\.[^.]+\.//; s/^org\.[^.]+\.//; s/-Default$//; s/^brave-app\./App: /')
+    
+    # Workspace label formatting
+    if [[ "$ws_id" -lt 0 ]]; then
+      ws_label="Special"
+    else
+      ws_label="Workspace $ws_id"
+    fi
+
+    # Print tab-delimited: DisplayLine \t Address
+    printf "%-15.15s  %s  %-20.20s  │  %s\t%s\n" \
+      "[$ws_label]" "$icon" "$app_clean" "$title" "$address"
+done | sort -V -k1,1)
+
+if [[ -z "$items" ]]; then
+  echo "No active windows available."
+  exit 0
+fi
+
+# Launch fzf in floating/interactive picker mode
+selected=$(echo "$items" | fzf \
+  --delimiter=$'\t' \
+  --with-nth=1 \
+  --prompt="  Search windows > " \
+  --header="  Workspaces & Windows (Enter: Jump to window, Esc: Cancel)" \
+  --reverse \
+  --cycle \
+  --border=rounded \
+  --margin=1,2 \
+  --padding=1 \
+  --info=inline || true)
+
+# If a window was selected, focus it immediately
+if [[ -n "$selected" ]]; then
+  address=$(echo "$selected" | awk -F'\t' '{print $2}')
+  if [[ -n "$address" ]]; then
+    hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1
+  fi
+fi
