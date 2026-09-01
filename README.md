@@ -11,10 +11,14 @@ A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprlan
 * **Smart Detection:** Distinguishes occupied, empty, and currently focused workspaces.
 * **Native Integration:** Built with Quickshell's Hyprland IPC layer, perfectly matching Omarchy's theme.
 
-### ⌨️ 2. Global Keyboard-First Window Picker
+### ⌨️ 2. Global Keyboard-First Window Picker (Modern TUI Pro)
 * **Fuzzy search across all workspaces:** Jump directly to any open window in seconds (`type` → `Enter`).
+* **Live Window Inspector (Split View):** Real-time dashboard card showing window title, process ID, workspace badge, tiling/floating state, geometry, and address.
 * **Auto-Workspace Switching:** Instantly switches to the target workspace and brings the selected window into focus.
-* **Rich Visuals:** Displays workspace badges, application Nerd Font icons, and window titles in a sleek floating modal.
+* **Window Management Actions:**
+  * `Enter` ➜ Jump & focus window
+  * `Ctrl + K` ➜ Instantly kill/close selected window
+  * `Ctrl + M` ➜ Bring selected window to active workspace
 
 ![Window Picker](https://raw.githubusercontent.com/alexwest1981/omarchy-workspaces-preview/main/picker-screenshot.png)
 
@@ -22,7 +26,7 @@ A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprlan
 Customizable directly from the bottom footer of the window picker without leaving the app:
 * `Ctrl + T` – **Theme:** *Based on System (Auto)*, *Tokyo Night*, *Catppuccin Mocha*, *Nord*, *Gruvbox*, *Cyberpunk*, *Monochrome*.
 * `Ctrl + B` – **Borders & Corners:** *Rounded*, *Sharp*, *Double*, *Bold*, *None*.
-* `Ctrl + S` – **Size & Margins:** *Standard*, *Compact*, *Spacious*.
+* `Ctrl + S` – **View Mode:** *Split Inspector*, *Wide Inspector*, *List Only (Compact)*.
 
 Preferences are automatically remembered in `~/.config/omarchy/workspaces-picker.json`.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# omarchy-workspaces-picker
+# omarchy-workspaces-picker (Modern TUI Pro Edition)
 # Global fuzzy window & workspace switcher for Omarchy / Hyprland
 #
 # Part of the Omarchy Workspaces Preview Plugin
@@ -9,17 +9,61 @@
 
 set -euo pipefail
 
-# If launched outside a terminal (e.g. from Hyprland keybinding), re-launch inside a floating TUI window
+# ------------------------------------------------------------------------------
+# 1. Preview Card Sub-renderer (invoked by fzf --preview)
+# ------------------------------------------------------------------------------
+if [[ "${1:-}" == "--preview-card" ]]; then
+  shift
+  address="${1:-}"
+  ws_id="${2:-}"
+  app_name="${3:-}"
+  title="${4:-}"
+  pid="${5:-}"
+  size="${6:-}"
+  floating="${7:-}"
+  icon="${8:-}"
+  ws_label="${9:-}"
+
+  if [[ -z "$address" ]]; then
+    echo ""
+    echo -e "\033[90m  Select a window to inspect details...\033[0m"
+    exit 0
+  fi
+
+  state_str=$([[ "$floating" == "true" ]] && echo -e "\033[1;33m󰉈 Floating\033[0m" || echo -e "\033[1;32m󰕰 Tiled\033[0m")
+
+  echo ""
+  echo -e " \033[1;36m╭──────────────────────────────────────────────────────────╮\033[0m"
+  printf " \033[1;36m│\033[0m  \033[1;35m%s\033[0m  \033[1;37m%-48.48s\033[0m \033[1;36m│\033[0m\n" "$icon" "$app_name"
+  echo -e " \033[1;36m├──────────────────────────────────────────────────────────┤\033[0m"
+  printf " \033[1;36m│\033[0m  \033[38;5;111m🏷️  Title:\033[0m      \033[1;37m%-43.43s\033[0m \033[1;36m│\033[0m\n" "$title"
+  printf " \033[1;36m│\033[0m  \033[38;5;111m🖥️  Workspace:\033[0m  \033[1;33m%-43.43s\033[0m \033[1;36m│\033[0m\n" "$ws_label"
+  printf " \033[1;36m│\033[0m  \033[38;5;111m🪟 State:\033[0m      %-52b \033[1;36m│\033[0m\n" "$state_str"
+  printf " \033[1;36m│\033[0m  \033[38;5;111m📐 Geometry:\033[0m   \033[37m%-43.43s\033[0m \033[1;36m│\033[0m\n" "$size"
+  printf " \033[1;36m│\033[0m  \033[38;5;111m🔢 Process ID:\033[0m \033[37m%-43.43s\033[0m \033[1;36m│\033[0m\n" "$pid"
+  printf " \033[1;36m│\033[0m  \033[38;5;111m🔑 Address:\033[0m    \033[90m%-43.43s\033[0m \033[1;36m│\033[0m\n" "$address"
+  echo -e " \033[1;36m├──────────────────────────────────────────────────────────┤\033[0m"
+  echo -e " \033[1;36m│\033[0m  \033[1;32m⚡ Quick Actions:\033[0m                                       \033[1;36m│\033[0m"
+  echo -e " \033[1;36m│\033[0m  \033[33m• Enter    \033[0m ➜ \033[37mJump to window & focus\033[0m                    \033[1;36m│\033[0m"
+  echo -e " \033[1;36m│\033[0m  \033[33m• Ctrl + K \033[0m ➜ \033[31mClose this window\033[0m                         \033[1;36m│\033[0m"
+  echo -e " \033[1;36m│\033[0m  \033[33m• Ctrl + M \033[0m ➜ \033[35mMove to current workspace\033[0m                 \033[1;36m│\033[0m"
+  echo -e " \033[1;36m╰──────────────────────────────────────────────────────────╯\033[0m"
+  exit 0
+fi
+
+# ------------------------------------------------------------------------------
+# 2. Main Launcher & Floating TUI Shell
+# ------------------------------------------------------------------------------
 if [ ! -t 0 ]; then
   exec omarchy-launch-tui --app-id=TUI.float "$0" "$@"
 fi
 
-# Ensure required commands are available
+# Dependencies
 command -v hyprctl >/dev/null 2>&1 || { echo "Error: hyprctl is required" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 command -v fzf >/dev/null 2>&1 || { echo "Error: fzf is required" >&2; exit 1; }
 
-# Configuration management
+# Configuration
 CONFIG_DIR="$HOME/.config/omarchy"
 CONFIG_FILE="$CONFIG_DIR/workspaces-picker.json"
 
@@ -102,25 +146,25 @@ get_theme_colors() {
         yellow=$(grep '^yellow *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$yellow")
         cyan=$(grep '^cyan *=' "$colors_file" | head -1 | cut -d'"' -f2 || echo "$cyan")
       fi
-      echo "bg:$bg,fg:$fg,hl:$yellow,bg+:$selection,fg+:$fg,hl+:$yellow,border:$accent,prompt:$cyan,pointer:$accent,header:$accent,info:$cyan,footer:$accent"
+      echo "bg:$bg,fg:$fg,hl:$yellow,bg+:$selection,fg+:$fg,hl+:$yellow,border:$accent,prompt:$cyan,pointer:$accent,header:$accent,info:$cyan,footer:$accent,preview-border:$accent"
       ;;
     tokyo-night)
-      echo "bg:#1a1b26,fg:#a9b1d6,hl:#e0af68,bg+:#292e42,fg+:#c0caf5,hl+:#e0af68,border:#7aa2f7,prompt:#7dcfff,pointer:#7aa2f7,header:#7aa2f7,info:#7dcfff,footer:#7aa2f7"
+      echo "bg:#1a1b26,fg:#a9b1d6,hl:#e0af68,bg+:#292e42,fg+:#c0caf5,hl+:#e0af68,border:#7aa2f7,prompt:#7dcfff,pointer:#7aa2f7,header:#7aa2f7,info:#7dcfff,footer:#7aa2f7,preview-border:#7aa2f7"
       ;;
     catppuccin)
-      echo "bg:#1e1e2e,fg:#cdd6f4,hl:#f9e2af,bg+:#313244,fg+:#cdd6f4,hl+:#f9e2af,border:#89b4fa,prompt:#89dceb,pointer:#f5c2e7,header:#cba6f7,info:#89dceb,footer:#89b4fa"
+      echo "bg:#1e1e2e,fg:#cdd6f4,hl:#f9e2af,bg+:#313244,fg+:#cdd6f4,hl+:#f9e2af,border:#89b4fa,prompt:#89dceb,pointer:#f5c2e7,header:#cba6f7,info:#89dceb,footer:#89b4fa,preview-border:#89b4fa"
       ;;
     nord)
-      echo "bg:#2e3440,fg:#eceff4,hl:#ebcb8b,bg+:#3b4252,fg+:#eceff4,hl+:#ebcb8b,border:#88c0d0,prompt:#81a1c1,pointer:#88c0d0,header:#88c0d0,info:#81a1c1,footer:#88c0d0"
+      echo "bg:#2e3440,fg:#eceff4,hl:#ebcb8b,bg+:#3b4252,fg+:#eceff4,hl+:#ebcb8b,border:#88c0d0,prompt:#81a1c1,pointer:#88c0d0,header:#88c0d0,info:#81a1c1,footer:#88c0d0,preview-border:#88c0d0"
       ;;
     gruvbox)
-      echo "bg:#282828,fg:#ebdbb2,hl:#fabd2f,bg+:#3c3836,fg+:#ebdbb2,hl+:#fabd2f,border:#fe8019,prompt:#8ec07c,pointer:#fe8019,header:#fabd2f,info:#8ec07c,footer:#fe8019"
+      echo "bg:#282828,fg:#ebdbb2,hl:#fabd2f,bg+:#3c3836,fg+:#ebdbb2,hl+:#fabd2f,border:#fe8019,prompt:#8ec07c,pointer:#fe8019,header:#fabd2f,info:#8ec07c,footer:#fe8019,preview-border:#fe8019"
       ;;
     cyberpunk)
-      echo "bg:#000b1e,fg:#00ffff,hl:#ff0055,bg+:#0d1b2a,fg+:#00ffff,hl+:#ff0055,border:#ff007f,prompt:#00ff9f,pointer:#ff007f,header:#00ff9f,info:#00ff9f,footer:#ff007f"
+      echo "bg:#000b1e,fg:#00ffff,hl:#ff0055,bg+:#0d1b2a,fg+:#00ffff,hl+:#ff0055,border:#ff007f,prompt:#00ff9f,pointer:#ff007f,header:#00ff9f,info:#00ff9f,footer:#ff007f,preview-border:#ff007f"
       ;;
     monochrome)
-      echo "bg:#121212,fg:#ffffff,hl:#aaaaaa,bg+:#262626,fg+:#ffffff,hl+:#ffffff,border:#777777,prompt:#ffffff,pointer:#ffffff,header:#ffffff,info:#aaaaaa,footer:#777777"
+      echo "bg:#121212,fg:#ffffff,hl:#aaaaaa,bg+:#262626,fg+:#ffffff,hl+:#ffffff,border:#777777,prompt:#ffffff,pointer:#ffffff,header:#ffffff,info:#aaaaaa,footer:#777777,preview-border:#777777"
       ;;
     *)
       echo "border:blue,prompt:cyan,pointer:magenta,hl:yellow,hl+:yellow"
@@ -154,9 +198,9 @@ format_border_label() {
 
 format_size_label() {
   case "$1" in
-    compact) echo "Compact" ;;
-    standard) echo "Standard" ;;
-    spacious) echo "Spacious" ;;
+    compact) echo "List Only" ;;
+    standard) echo "Split Inspector" ;;
+    spacious) echo "Wide Inspector" ;;
     *) echo "$1" ;;
   esac
 }
@@ -179,6 +223,7 @@ get_icon() {
 }
 
 query=""
+SELF_SCRIPT="$(realpath "$0")"
 
 while true; do
   THEME=$(get_cfg "theme" "system")
@@ -190,19 +235,22 @@ while true; do
   BORDER_LBL=$(format_border_label "$BORDER")
   SIZE_LBL=$(format_size_label "$SIZE")
 
-  # Size / Layout parameters
+  # Size / Layout & Preview parameters
   case "$SIZE" in
     compact)
       MARGIN="0,0"
       PADDING="0"
+      PREVIEW_OPT="--preview-window=hidden"
       ;;
     spacious)
-      MARGIN="2,4"
-      PADDING="1,2"
+      MARGIN="1,2"
+      PADDING="1"
+      PREVIEW_OPT="--preview-window=right,48%,border-left"
       ;;
     *)
       MARGIN="1,2"
       PADDING="1"
+      PREVIEW_OPT="--preview-window=right,44%,border-left"
       ;;
   esac
 
@@ -217,23 +265,31 @@ while true; do
         (.workspace.id | tostring),
         .class,
         .title,
-        .address
+        .address,
+        (.pid | tostring),
+        (if .size then (.size[0]|tostring) + " × " + (.size[1]|tostring) + " px" else "N/A" end),
+        (.floating | tostring)
       ]
     | @tsv
-  ' | while IFS=$'\t' read -r ws_id class title address; do
+  ' | while IFS=$'\t' read -r ws_id class title address pid size_str floating; do
       [[ -z "$address" ]] && continue
       
-      icon=" $(get_icon "$class") "
+      icon="$(get_icon "$class")"
       app_clean=$(echo "$class" | sed -E 's/^com\.[^.]+\.//; s/^org\.[^.]+\.//; s/-Default$//; s/^brave-app\./App: /')
       
       if [[ "$ws_id" -lt 0 ]]; then
-        ws_label="Special"
+        ws_badge="[Special]"
+        ws_label="Special Workspace"
       else
+        ws_badge="[WS $ws_id]"
         ws_label="Workspace $ws_id"
       fi
 
-      printf "%-15.15s %s %-20.20s  │  %s\t%s\t%s\n" \
-        "[$ws_label]" "$icon" "$app_clean" "$title" "$address" "$ws_id"
+      display_row=$(printf "%-8.8s  %s  %-16.16s │ %s" \
+        "$ws_badge" "$icon" "$app_clean" "$title")
+
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+        "$display_row" "$address" "$ws_id" "$app_clean" "$title" "$pid" "$size_str" "$floating" "$icon" "$ws_label"
   done | sort -V -k1,1)
 
   if [[ -z "$items" ]]; then
@@ -241,24 +297,28 @@ while true; do
     exit 0
   fi
 
-  FOOTER_TEXT=" 🎨 Theme (Ctrl+T): $THEME_LBL  │  🖼️ Border (Ctrl+B): $BORDER_LBL  │  📐 Size (Ctrl+S): $SIZE_LBL"
+  FOOTER_TEXT=" 🎨 Theme (Ctrl+T): $THEME_LBL  │  🖼️ Border (Ctrl+B): $BORDER_LBL  │  📐 View (Ctrl+S): $SIZE_LBL  │  ❌ Close (Ctrl+K)  │  📦 Move (Ctrl+M)"
 
-  # Run fzf with expectation on shortcut keys
+  # Run fzf with expectation on shortcut keys & live inspector preview
   fzf_output=$(echo "$items" | fzf \
     --delimiter=$'\t' \
     --with-nth=1 \
     --prompt="  Search windows > " \
-    --header="  Workspaces & Windows (Enter: Jump, Esc: Cancel)" \
+    --header="  Workspace & Window Switcher (Enter: Jump, Esc: Cancel)" \
     --footer="$FOOTER_TEXT" \
+    --preview="$SELF_SCRIPT --preview-card {2} {3} {4} {5} {6} {7} {8} {9} {10}" \
+    $PREVIEW_OPT \
     --reverse \
     --cycle \
+    --pointer="▎❯" \
+    --marker="✔" \
     --border="$BORDER" \
     --margin="$MARGIN" \
     --padding="$PADDING" \
     --color="$COLOR_SPEC" \
     --query="$query" \
     --print-query \
-    --expect=ctrl-t,alt-t,ctrl-b,alt-b,ctrl-s,alt-s \
+    --expect=ctrl-t,alt-t,ctrl-b,alt-b,ctrl-s,alt-s,ctrl-k,ctrl-m \
     --info=inline || true)
 
   if [[ -z "$fzf_output" ]]; then
@@ -281,6 +341,27 @@ while true; do
       ;;
     ctrl-s|alt-s)
       cycle_size
+      continue
+      ;;
+    ctrl-k)
+      # Instantly close selected window
+      if [[ -n "$selected" ]]; then
+        address=$(echo "$selected" | awk -F'\t' '{print $2}')
+        if [[ -n "$address" ]]; then
+          hyprctl dispatch "hl.dsp.window.close({ address = \"$address\" })" >/dev/null 2>&1 || true
+        fi
+      fi
+      continue
+      ;;
+    ctrl-m)
+      # Move selected window to current active workspace
+      if [[ -n "$selected" ]]; then
+        address=$(echo "$selected" | awk -F'\t' '{print $2}')
+        active_ws=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // empty' || echo "1")
+        if [[ -n "$address" && -n "$active_ws" ]]; then
+          hyprctl dispatch "hl.dsp.window.move({ window = \"address:$address\", workspace = \"$active_ws\" })" >/dev/null 2>&1 || true
+        fi
+      fi
       continue
       ;;
     "")
