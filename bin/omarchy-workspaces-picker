@@ -322,13 +322,20 @@ while true; do
     --info=inline || true)
 
   if [[ -z "$fzf_output" ]]; then
-    break
+    exit 0
   fi
 
-  # Read fzf response
-  query=$(echo "$fzf_output" | head -n 1)
-  key=$(echo "$fzf_output" | sed -n '2p')
-  selected=$(echo "$fzf_output" | sed -n '3p')
+  # Robust array parsing of fzf output
+  mapfile -t fzf_lines <<< "$fzf_output"
+  query="${fzf_lines[0]:-}"
+  key="${fzf_lines[1]:-}"
+  selected="${fzf_lines[2]:-}"
+
+  # If key line contains tabs, lines[1] is actually the selected item (key was empty)
+  if [[ "$key" == *$'\t'* ]]; then
+    selected="$key"
+    key=""
+  fi
 
   case "$key" in
     ctrl-t|alt-t)
@@ -365,7 +372,7 @@ while true; do
       continue
       ;;
     "")
-      # Enter was pressed on a selected window
+      # Enter was pressed on a selected window -> focus and exit immediately
       if [[ -n "$selected" ]]; then
         address=$(echo "$selected" | awk -F'\t' '{print $2}')
         ws_id=$(echo "$selected" | awk -F'\t' '{print $3}')
@@ -376,10 +383,11 @@ while true; do
           hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null 2>&1 || true
         fi
       fi
-      break
+      exit 0
       ;;
     *)
-      break
+      exit 0
       ;;
   esac
 done
+exit 0
