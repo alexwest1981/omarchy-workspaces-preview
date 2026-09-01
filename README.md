@@ -13,10 +13,12 @@ A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprlan
 
 ### ⌨️ 2. Global Keyboard-First Window Picker (Modern TUI Pro)
 * **Fuzzy search across all workspaces:** Jump directly to any open window in seconds (`type` → `Enter`).
-* **Live Window Inspector (Split View):** Real-time dashboard card showing window title, process ID, workspace badge, tiling/floating state, geometry, and address.
+* **Live Window Inspector (Split View):** Real-time dashboard card showing window title, process ID, workspace badge, active monitor detection, next free workspace, geometry, and address.
 * **Auto-Workspace Switching:** Instantly switches to the target workspace and brings the selected window into focus.
+* **Multi-Monitor & Smart Workspace Allocation:** Automatically finds the next available free workspace on your currently focused monitor (e.g. AOC, BenQ, HP).
 * **Window Management Actions:**
-  * `Enter` ➜ Jump & focus window
+  * `Enter` ➜ Jump & focus window *(or open in new workspace if New WS mode is ON)*
+  * `Ctrl + N` ➜ **Instant Open in New Free Workspace** on active screen
   * `Ctrl + K` ➜ Instantly kill/close selected window
   * `Ctrl + M` ➜ Bring selected window to active workspace
 
@@ -26,7 +28,8 @@ A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprlan
 Customizable directly from the bottom footer of the window picker without leaving the app:
 * `Ctrl + T` – **Theme:** *Based on System (Auto)*, *Tokyo Night*, *Catppuccin Mocha*, *Nord*, *Gruvbox*, *Cyberpunk*, *Monochrome*.
 * `Ctrl + B` – **Borders & Corners:** *Rounded*, *Sharp*, *Double*, *Bold*, *None*.
-* `Ctrl + S` – **View Mode:** *Split Inspector*, *Wide Inspector*, *List Only (Compact)*.
+* `Ctrl + S` – **View Mode:** *Split View*, *Wide View*, *List Only (Compact)*.
+* `Ctrl + W` – **New WS Mode (Toggle):** *ON / OFF* (When ON, `Enter` automatically moves the window to a fresh workspace on the active monitor).
 
 Preferences are automatically remembered in `~/.config/omarchy/workspaces-picker.json`.
 
