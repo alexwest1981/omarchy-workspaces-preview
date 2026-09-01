@@ -232,8 +232,8 @@ while true; do
         ws_label="Workspace $ws_id"
       fi
 
-      printf "%-15.15s %s %-20.20s  │  %s\t%s\n" \
-        "[$ws_label]" "$icon" "$app_clean" "$title" "$address"
+      printf "%-15.15s %s %-20.20s  │  %s\t%s\t%s\n" \
+        "[$ws_label]" "$icon" "$app_clean" "$title" "$address" "$ws_id"
   done | sort -V -k1,1)
 
   if [[ -z "$items" ]]; then
@@ -287,8 +287,12 @@ while true; do
       # Enter was pressed on a selected window
       if [[ -n "$selected" ]]; then
         address=$(echo "$selected" | awk -F'\t' '{print $2}')
+        ws_id=$(echo "$selected" | awk -F'\t' '{print $3}')
+        if [[ -n "$ws_id" && "$ws_id" != "Special" ]]; then
+          hyprctl dispatch "hl.dsp.focus({ workspace = \"$ws_id\" })" >/dev/null 2>&1 || true
+        fi
         if [[ -n "$address" ]]; then
-          hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1
+          hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null 2>&1 || true
         fi
       fi
       break
