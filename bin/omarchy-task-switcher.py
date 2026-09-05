@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# Omarchy macOS-Style Visual Task Switcher 🖥️✨
-# Authentic Command-Tab HUD for Omarchy / Hyprland
+# Omarchy Visual Task Switcher & Window Preview HUD 🖥️✨
+# Hybrid macOS / Window-Preview Switcher for Omarchy / Hyprland
 #
 # Part of the Omarchy Workspaces Preview Plugin
 # https://github.com/alexwest1981/omarchy-workspaces-preview
@@ -14,12 +14,12 @@ import subprocess
 import glob
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QScrollArea, QFrame, QGraphicsDropShadowEffect
+    QScrollArea, QFrame, QGraphicsDropShadowEffect, QSizePolicy
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QThread, pyqtSlot, QSize, QRectF
 from PyQt6.QtGui import (
     QIcon, QPixmap, QFont, QColor, QPainter, QPainterPath,
-    QKeyEvent, QMouseEvent, QCursor
+    QKeyEvent, QMouseEvent, QCursor, QBrush, QPen, QLinearGradient
 )
 
 # ------------------------------------------------------------------------------
@@ -41,10 +41,15 @@ def get_hyprland_data():
     # Active / focused monitor
     focused_mon = None
     mon_map = {}
+    active_ws_across_monitors = set()
     for m in monitors:
         mon_map[m.get("id")] = m.get("description") or m.get("model") or m.get("name") or "Screen"
         if m.get("focused"):
             focused_mon = m
+        active_ws_info = m.get("activeWorkspace", {})
+        if active_ws_info and "id" in active_ws_info:
+            active_ws_across_monitors.add(active_ws_info["id"])
+            
     if not focused_mon and monitors:
         focused_mon = monitors[0]
 
@@ -78,6 +83,9 @@ def get_hyprland_data():
         if "omarchy-task-switcher" in app_cls or "omarchy-workspaces-picker" in title:
             continue
             
+        at = c.get("at", [0, 0])
+        sz = c.get("size", [0, 0])
+        
         valid_windows.append({
             "address": c.get("address"),
             "title": title or "Untitled Window",
@@ -90,7 +98,9 @@ def get_hyprland_data():
             "pid": c.get("pid", 0),
             "floating": c.get("floating", False),
             "focus_history": c.get("focusHistoryID", 999),
-            "size": c.get("size", [0, 0])
+            "at": at,
+            "size": sz,
+            "is_visible": ws_id in active_ws_across_monitors and sz[0] > 0 and sz[1] > 0
         })
 
     valid_windows.sort(key=lambda w: w["focus_history"])
@@ -119,7 +129,6 @@ class IconResolver:
             return
         cls._initialized = True
 
-        # 1. Desktop files index
         dirs = [
             "/usr/share/applications",
             os.path.expanduser("~/.local/share/applications"),
@@ -154,7 +163,6 @@ class IconResolver:
                     except Exception:
                         pass
 
-        # 2. High-res icon index
         icon_roots = [
             "/usr/share/icons/hicolor",
             "/usr/share/icons",
@@ -198,7 +206,6 @@ class IconResolver:
         candidates = [key]
         display_name = app_class or "Application"
 
-        # Check desktop map for app_class and initial_class
         for search_k in [key, (initial_class or "").lower()]:
             if search_k in cls._desktop_map:
                 icon_val, d_name = cls._desktop_map[search_k]
@@ -207,7 +214,6 @@ class IconResolver:
                 if d_name:
                     display_name = d_name
 
-        # Webapp & specialized alias handling
         if "discord" in key:
             candidates.extend(["omarchy-discord", "discord", "com.discordapp.Discord"])
             display_name = "Discord"
@@ -239,7 +245,6 @@ class IconResolver:
             candidates.extend(["org.gnome.Nautilus", "system-file-manager", "nautilus"])
             display_name = "Files"
 
-        # 1. Search candidates in indexed icon paths or direct file paths
         for c in candidates:
             if not c:
                 continue
@@ -257,7 +262,6 @@ class IconResolver:
                     cls._pixmap_cache[key] = (pix, display_name)
                     return pix, display_name
 
-        # 2. Try QIcon.fromTheme
         for c in candidates:
             if not c:
                 continue
@@ -268,7 +272,6 @@ class IconResolver:
                     cls._pixmap_cache[key] = (pix, display_name)
                     return pix, display_name
 
-        # 3. Fallback stylish badge
         pix = cls._generate_fallback_badge(display_name or key)
         cls._pixmap_cache[key] = (pix, display_name)
         return pix, display_name
@@ -295,84 +298,205 @@ class IconResolver:
 
 
 # ------------------------------------------------------------------------------
-# 3. Authentic macOS App Switcher Tile
+# 3. Async Live Window Thumbnail Capturer
 # ------------------------------------------------------------------------------
-class AppTile(QFrame):
+class ThumbnailWorker(QThread):
+    thumbnail_ready = pyqtSignal(str, str)  # address, filepath
+
+    def __init__(self, windows):
+        super().__init__()
+        self.windows = windows
+        self._running = True
+
+    def stop(self):
+        self._running = False
+
+    def run(self):
+        for w in self.windows:
+            if not self._running:
+                break
+            if not w.get("is_visible"):
+                continue
+            addr = w["address"]
+            x, y = w["at"]
+            width, height = w["size"]
+            if width <= 10 or height <= 10:
+                continue
+            out_file = f"/tmp/hypr_thumb_{addr}.png"
+            try:
+                res = subprocess.run(
+                    ["grim", "-g", f"{x},{y} {width}x{height}", out_file],
+                    capture_output=True,
+                    check=False
+                )
+                if res.returncode == 0 and os.path.exists(out_file) and self._running:
+                    self.thumbnail_ready.emit(addr, out_file)
+            except Exception:
+                pass
+
+
+# ------------------------------------------------------------------------------
+# 4. Modern Window Preview Card Widget
+# ------------------------------------------------------------------------------
+class WindowPreviewCard(QFrame):
     clicked = pyqtSignal(int)
+
+    CARD_WIDTH = 208
+    CARD_HEIGHT = 136
 
     def __init__(self, index, window_info, parent=None):
         super().__init__(parent)
         self.index = index
         self.win = window_info
         self.is_selected = False
-        self.display_name = "App"
+        self.thumbnail_pixmap = None
 
-        self.setFixedSize(92, 92)
+        self.setFixedSize(self.CARD_WIDTH, self.CARD_HEIGHT)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.init_ui()
-        self.update_style()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # App Icon
-        self.lbl_icon = QLabel()
-        self.lbl_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        pix, d_name = IconResolver.resolve(
+        # Resolve icon
+        self.icon_pix, self.display_name = IconResolver.resolve(
             self.win["class"], 
             self.win.get("initialClass", ""), 
             self.win["title"]
         )
-        self.display_name = d_name
-        self.win["display_name"] = d_name
+        self.win["display_name"] = self.display_name
 
-        scaled_pix = pix.scaled(
-            64, 64, 
-            Qt.AspectRatioMode.KeepAspectRatio, 
-            Qt.TransformationMode.SmoothTransformation
-        )
-        self.lbl_icon.setPixmap(scaled_pix)
-        layout.addWidget(self.lbl_icon)
+        # Check existing thumbnail
+        cached_file = f"/tmp/hypr_thumb_{self.win['address']}.png"
+        if os.path.exists(cached_file):
+            self.set_thumbnail_file(cached_file)
+
+        self.update()
+
+    def set_thumbnail_file(self, filepath):
+        pix = QPixmap(filepath)
+        if not pix.isNull():
+            self.thumbnail_pixmap = pix
+            self.update()
 
     def set_selected(self, selected: bool):
-        self.is_selected = selected
-        self.update_style()
-
-    def update_style(self):
-        if self.is_selected:
-            # Authentic macOS Command-Tab highlight pill
-            self.setStyleSheet("""
-                AppTile {
-                    background-color: rgba(255, 255, 255, 0.22);
-                    border: 1.5px solid rgba(255, 255, 255, 0.35);
-                    border-radius: 18px;
-                }
-            """)
-        else:
-            self.setStyleSheet("""
-                AppTile {
-                    background-color: transparent;
-                    border: 1.5px solid transparent;
-                    border-radius: 18px;
-                }
-                AppTile:hover {
-                    background-color: rgba(255, 255, 255, 0.10);
-                    border-color: rgba(255, 255, 255, 0.15);
-                }
-            """)
+        if self.is_selected != selected:
+            self.is_selected = selected
+            self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.index)
 
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        w, h = self.width(), self.height()
+        radius = 12.0
+        rect = QRectF(2, 2, w - 4, h - 4)
+
+        clip_path = QPainterPath()
+        clip_path.addRoundedRect(rect, radius, radius)
+
+        # 1. Background Fill / Thumbnail
+        painter.save()
+        painter.setClipPath(clip_path)
+
+        if self.thumbnail_pixmap and not self.thumbnail_pixmap.isNull():
+            scaled = self.thumbnail_pixmap.scaled(
+                int(rect.width()), int(rect.height()),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            # Center crop
+            sx = (scaled.width() - int(rect.width())) // 2
+            sy = (scaled.height() - int(rect.height())) // 2
+            painter.drawPixmap(int(rect.x()), int(rect.y()), scaled, sx, sy, int(rect.width()), int(rect.height()))
+            
+            # Subtle dark glass vignette overlay
+            vignette = QLinearGradient(0, 0, 0, h)
+            vignette.setColorAt(0.0, QColor(0, 0, 0, 30))
+            vignette.setColorAt(1.0, QColor(0, 0, 0, 80))
+            painter.fillRect(self.rect(), QBrush(vignette))
+        else:
+            # Dark Canvas Placeholder with watermark icon
+            bg_grad = QLinearGradient(0, 0, w, h)
+            bg_grad.setColorAt(0.0, QColor("#1e2230"))
+            bg_grad.setColorAt(1.0, QColor("#11141c"))
+            painter.fillRect(self.rect(), QBrush(bg_grad))
+
+            watermark = self.icon_pix.scaled(
+                54, 54,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            painter.setOpacity(0.35)
+            painter.drawPixmap((w - 54) // 2, (h - 54) // 2, watermark)
+            painter.setOpacity(1.0)
+
+        painter.restore()
+
+        # 2. Top-Left App Icon Badge
+        icon_badge_size = 28
+        badge_x, badge_y = 10, 10
+        badge_rect = QRectF(badge_x, badge_y, icon_badge_size, icon_badge_size)
+
+        badge_path = QPainterPath()
+        badge_path.addRoundedRect(badge_rect, 7, 7)
+
+        painter.fillPath(badge_path, QColor(20, 20, 25, 200))
+        painter.setPen(QPen(QColor(255, 255, 255, 60), 1))
+        painter.drawPath(badge_path)
+
+        scaled_icon = self.icon_pix.scaled(
+            20, 20,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        painter.drawPixmap(badge_x + 4, badge_y + 4, scaled_icon)
+
+        # 3. Top-Right Workspace Pill Badge
+        ws_id = self.win["workspace"]
+        ws_text = f"WS {ws_id}"
+        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        
+        ws_pill_w = 44
+        ws_pill_h = 20
+        ws_x = w - ws_pill_w - 10
+        ws_y = 10
+        ws_rect = QRectF(ws_x, ws_y, ws_pill_w, ws_pill_h)
+        
+        ws_path = QPainterPath()
+        ws_path.addRoundedRect(ws_rect, 6, 6)
+        painter.fillPath(ws_path, QColor(15, 23, 42, 210))
+        painter.setPen(QPen(QColor(56, 189, 248, 120), 1))
+        painter.drawPath(ws_path)
+
+        painter.setPen(QColor("#38bdf8"))
+        painter.drawText(ws_rect, Qt.AlignmentFlag.AlignCenter, ws_text)
+
+        # 4. Selection Border & Glowing Frame
+        if self.is_selected:
+            # Vivid highlight border (Cyan glow)
+            sel_pen = QPen(QColor("#38bdf8"), 2.5)
+            painter.setPen(sel_pen)
+            painter.drawPath(clip_path)
+
+            # Subtle inner glow line
+            inner_rect = QRectF(4, 4, w - 8, h - 8)
+            inner_path = QPainterPath()
+            inner_path.addRoundedRect(inner_rect, radius - 2, radius - 2)
+            painter.setPen(QPen(QColor(255, 255, 255, 80), 1.0))
+            painter.drawPath(inner_path)
+        else:
+            # Subtle translucent border
+            unsel_pen = QPen(QColor(255, 255, 255, 30), 1.2)
+            painter.setPen(unsel_pen)
+            painter.drawPath(clip_path)
+
 
 # ------------------------------------------------------------------------------
-# 4. Main macOS Command-Tab HUD Window
+# 5. Main Visual Hybrid Task Switcher HUD Window
 # ------------------------------------------------------------------------------
-class MacOSTaskSwitcher(QWidget):
+class HybridTaskSwitcher(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowFlags(
@@ -386,15 +510,26 @@ class MacOSTaskSwitcher(QWidget):
         self.windows, self.monitor, self.next_free_ws = get_hyprland_data()
         self.filtered_indices = list(range(len(self.windows)))
         
-        # Start selected at index 1 (the MRU previous window) or 0
+        # Start selected at index 1 (MRU previous window) or 0
         self.selected_pos = 1 if len(self.windows) > 1 else 0
 
         self.init_ui()
         self.position_on_screen()
         self.update_selection()
 
+        # Start live thumbnail capture in background thread
+        self.thumb_worker = ThumbnailWorker(self.windows)
+        self.thumb_worker.thumbnail_ready.connect(self._on_thumbnail_ready)
+        self.thumb_worker.start()
+
+    def closeEvent(self, event):
+        if hasattr(self, "thumb_worker") and self.thumb_worker.isRunning():
+            self.thumb_worker.stop()
+            self.thumb_worker.wait(150)
+        super().closeEvent(event)
+
     def changeEvent(self, event):
-        # Dismiss immediately if switcher loses focus
+        # Auto-dismiss when window loses focus
         if event.type() == QEvent.Type.ActivationChange:
             if not self.isActiveWindow():
                 self.close()
@@ -402,91 +537,135 @@ class MacOSTaskSwitcher(QWidget):
 
     def init_ui(self):
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(18, 18, 18, 18)
+        root_layout.setContentsMargins(16, 16, 16, 16)
 
-        # Main macOS Frosted Glass HUD Container
+        # Main Frosted Glass HUD Box
         self.hud_box = QFrame()
-        self.hud_box.setObjectName("MacOS_HUD")
+        self.hud_box.setObjectName("MainHUD")
         self.hud_box.setStyleSheet("""
-            #MacOS_HUD {
-                background-color: rgba(25, 25, 28, 0.88);
-                border: 1px solid rgba(255, 255, 255, 0.14);
-                border-radius: 22px;
+            #MainHUD {
+                background-color: rgba(18, 20, 28, 0.92);
+                border: 1.2px solid rgba(255, 255, 255, 0.14);
+                border-radius: 20px;
             }
         """)
 
         # Soft drop shadow for floating elevation
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(36)
-        shadow.setColor(QColor(0, 0, 0, 160))
+        shadow.setColor(QColor(0, 0, 0, 180))
         shadow.setOffset(0, 10)
         self.hud_box.setGraphicsEffect(shadow)
 
         hud_layout = QVBoxLayout(self.hud_box)
         hud_layout.setContentsMargins(18, 16, 18, 14)
-        hud_layout.setSpacing(10)
-        hud_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hud_layout.setSpacing(12)
 
-        # 1. Horizontal Strip of App Tiles
+        # 1. Top Section: Scrollable Horizontal Strip of Window Preview Cards
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setStyleSheet("background: transparent;")
+        self.scroll_area.setFixedHeight(148)
 
-        self.tiles_widget = QWidget()
-        self.tiles_widget.setStyleSheet("background: transparent;")
-        self.tiles_layout = QHBoxLayout(self.tiles_widget)
-        self.tiles_layout.setContentsMargins(6, 4, 6, 4)
-        self.tiles_layout.setSpacing(10)
-        self.tiles_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cards_widget = QWidget()
+        self.cards_widget.setStyleSheet("background: transparent;")
+        self.cards_layout = QHBoxLayout(self.cards_widget)
+        self.cards_layout.setContentsMargins(4, 4, 4, 4)
+        self.cards_layout.setSpacing(14)
+        self.cards_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.tile_widgets = []
-        self._build_tiles()
+        self.card_widgets = []
+        self._build_cards()
 
-        self.scroll_area.setWidget(self.tiles_widget)
+        self.scroll_area.setWidget(self.cards_widget)
         hud_layout.addWidget(self.scroll_area)
 
-        # 2. macOS Active App Name & Window Title Display
-        self.lbl_app_name = QLabel()
-        self.lbl_app_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_app_name.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        self.lbl_app_name.setStyleSheet("color: #ffffff; letter-spacing: 0.3px;")
-        hud_layout.addWidget(self.lbl_app_name)
+        # 2. Bottom Section: Info Banner about the Selected Window
+        info_container = QVBoxLayout()
+        info_container.setSpacing(4)
+        info_container.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.lbl_sub_title = QLabel()
-        self.lbl_sub_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_sub_title.setFont(QFont("Segoe UI", 10))
-        self.lbl_sub_title.setStyleSheet("color: #a1a1aa;")
-        hud_layout.addWidget(self.lbl_sub_title)
+        # Primary Title: Window Title
+        self.lbl_win_title = QLabel()
+        self.lbl_win_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_win_title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.lbl_win_title.setStyleSheet("color: #ffffff; letter-spacing: 0.2px;")
+        info_container.addWidget(self.lbl_win_title)
+
+        # Metadata Details: App Name • Workspace • Monitor • State
+        self.lbl_meta = QLabel()
+        self.lbl_meta.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_meta.setFont(QFont("Segoe UI", 10))
+        self.lbl_meta.setStyleSheet("color: #94a3b8;")
+        info_container.addWidget(self.lbl_meta)
+
+        hud_layout.addLayout(info_container)
+
+        # 3. Subtle Footer Hints
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(4, 2, 4, 0)
+        footer_layout.setSpacing(8)
+
+        hints = [
+            ("⇥ Tab / ← →", "Navigate"),
+            ("↵ Enter", "Focus"),
+            ("Q", "Close"),
+            ("N", f"New WS {self.next_free_ws}"),
+            ("1-9", "Jump"),
+            ("Esc", "Dismiss")
+        ]
+
+        for key_text, desc in hints:
+            h_sub = QHBoxLayout()
+            h_sub.setSpacing(4)
+
+            k_lbl = QLabel(key_text)
+            k_lbl.setStyleSheet("""
+                color: #cbd5e1;
+                background: rgba(255, 255, 255, 0.10);
+                border-radius: 4px;
+                padding: 1px 5px;
+                font-size: 9px;
+                font-weight: 700;
+            """)
+            d_lbl = QLabel(desc)
+            d_lbl.setStyleSheet("color: #64748b; font-size: 9px; font-weight: 600;")
+            h_sub.addWidget(k_lbl)
+            h_sub.addWidget(d_lbl)
+            footer_layout.addLayout(h_sub)
+            footer_layout.addSpacing(4)
+
+        footer_layout.addStretch()
+        hud_layout.addLayout(footer_layout)
 
         root_layout.addWidget(self.hud_box)
 
-    def _build_tiles(self):
-        for t in self.tile_widgets:
-            t.deleteLater()
-        self.tile_widgets = []
+    def _build_cards(self):
+        for c in self.card_widgets:
+            c.deleteLater()
+        self.card_widgets = []
 
         if not self.filtered_indices:
-            empty_lbl = QLabel("No active windows")
+            empty_lbl = QLabel("No active windows available")
             empty_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; font-style: italic; padding: 20px;")
-            self.tiles_layout.addWidget(empty_lbl)
-            self.tile_widgets.append(empty_lbl)
+            self.cards_layout.addWidget(empty_lbl)
+            self.card_widgets.append(empty_lbl)
             return
 
         for pos, orig_idx in enumerate(self.filtered_indices):
             win_info = self.windows[orig_idx]
-            tile = AppTile(pos, win_info, self)
-            tile.clicked.connect(self._on_tile_clicked)
-            self.tile_widgets.append(tile)
-            self.tiles_layout.addWidget(tile)
+            card = WindowPreviewCard(pos, win_info, self)
+            card.clicked.connect(self._on_card_clicked)
+            self.card_widgets.append(card)
+            self.cards_layout.addWidget(card)
 
     def position_on_screen(self):
         count = max(1, len(self.filtered_indices))
-        # HUD dynamically sizes based on number of items, bounded between 320px and 1000px
-        hud_width = min(1020, max(340, count * 102 + 64))
-        hud_height = 190
+        hud_width = min(1300, max(520, count * 222 + 64))
+        hud_height = 252
         self.resize(hud_width, hud_height)
 
         # Center on focused monitor
@@ -502,35 +681,57 @@ class MacOSTaskSwitcher(QWidget):
 
     def update_selection(self):
         if not self.filtered_indices:
-            self.lbl_app_name.setText("No Open Windows")
-            self.lbl_sub_title.setText("")
+            self.lbl_win_title.setText("No Open Windows")
+            self.lbl_meta.setText("")
             return
 
         self.selected_pos = max(0, min(self.selected_pos, len(self.filtered_indices) - 1))
         
-        for pos, tile in enumerate(self.tile_widgets):
-            if isinstance(tile, AppTile):
-                tile.set_selected(pos == self.selected_pos)
+        for pos, card in enumerate(self.card_widgets):
+            if isinstance(card, WindowPreviewCard):
+                card.set_selected(pos == self.selected_pos)
 
         orig_idx = self.filtered_indices[self.selected_pos]
         win = self.windows[orig_idx]
         
-        d_name = win.get("display_name") or win["class"]
-        self.lbl_app_name.setText(d_name)
-
-        # Clean subtitle with workspace & truncated window title
+        # Format Title
         clean_title = win["title"]
-        if len(clean_title) > 55:
-            clean_title = clean_title[:52] + "..."
-        ws_badge = f"Workspace {win['workspace']}"
-        self.lbl_sub_title.setText(f"{ws_badge}  •  {clean_title}")
+        if len(clean_title) > 75:
+            clean_title = clean_title[:72] + "..."
+        self.lbl_win_title.setText(f"• {clean_title}")
 
-        # Ensure selected tile is scrolled into view
-        if 0 <= self.selected_pos < len(self.tile_widgets):
-            tile = self.tile_widgets[self.selected_pos]
-            self.scroll_area.ensureWidgetVisible(tile, 50, 0)
+        # Format Meta Details
+        d_name = win.get("display_name") or win["class"]
+        ws_id = win["workspace"]
+        mon_name = win["monitor_name"]
+        state_str = "Floating" if win["floating"] else "Tiled"
+        size_w, size_h = win["size"]
+        geo_str = f"{size_w}×{size_h}px" if size_w > 0 else ""
 
-    def _on_tile_clicked(self, pos):
+        meta_parts = [
+            f"📦 {d_name}",
+            f"📍 Workspace {ws_id}",
+            f"🖥️ {mon_name}",
+            f"🪟 {state_str}"
+        ]
+        if geo_str:
+            meta_parts.append(f"📐 {geo_str}")
+
+        self.lbl_meta.setText("   •   ".join(meta_parts))
+
+        # Ensure selected card is scrolled into view
+        if 0 <= self.selected_pos < len(self.card_widgets):
+            card = self.card_widgets[self.selected_pos]
+            self.scroll_area.ensureWidgetVisible(card, 60, 0)
+
+    @pyqtSlot(str, str)
+    def _on_thumbnail_ready(self, addr, filepath):
+        for card in self.card_widgets:
+            if isinstance(card, WindowPreviewCard) and card.win.get("address") == addr:
+                card.set_thumbnail_file(filepath)
+                break
+
+    def _on_card_clicked(self, pos):
         self.selected_pos = pos
         self.update_selection()
         self.activate_current_window()
@@ -569,14 +770,14 @@ class MacOSTaskSwitcher(QWidget):
         
         subprocess.run(["hyprctl", "dispatch", "closewindow", f"address:{addr}"], check=False)
         
-        # Remove and refresh tiles
+        # Remove and refresh cards
         del self.windows[orig_idx]
         self.filtered_indices = list(range(len(self.windows)))
         if not self.windows:
             self.close()
             return
         self.selected_pos = max(0, min(self.selected_pos, len(self.filtered_indices) - 1))
-        self._build_tiles()
+        self._build_cards()
         self.position_on_screen()
         self.update_selection()
 
@@ -636,7 +837,7 @@ class MacOSTaskSwitcher(QWidget):
             self.activate_current_window()
             return
 
-        # 'Q' / Cmd+Q / Ctrl+Q / Ctrl+K / Delete -> Close app (like macOS Cmd+Tab + Q)
+        # 'Q' / Cmd+Q / Ctrl+Q / Ctrl+K / Delete -> Close app
         if key == Qt.Key.Key_Q or ((mod & Qt.KeyboardModifier.ControlModifier) and key == Qt.Key.Key_K) or key == Qt.Key.Key_Delete:
             self.close_current_window()
             return
@@ -663,7 +864,6 @@ class MacOSTaskSwitcher(QWidget):
         # Instant search / filter on typing letter
         char = event.text().lower()
         if char and char.isalnum():
-            # Find next app matching character
             for offset in range(1, len(self.filtered_indices) + 1):
                 idx = (self.selected_pos + offset) % len(self.filtered_indices)
                 orig_idx = self.filtered_indices[idx]
@@ -679,14 +879,14 @@ class MacOSTaskSwitcher(QWidget):
 
 
 # ------------------------------------------------------------------------------
-# 5. Launcher Entry Point
+# 6. Launcher Entry Point
 # ------------------------------------------------------------------------------
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("OmarchyTaskSwitcher")
     app.setOrganizationName("Omarchy")
 
-    switcher = MacOSTaskSwitcher()
+    switcher = HybridTaskSwitcher()
     switcher.show()
     sys.exit(app.exec())
 
