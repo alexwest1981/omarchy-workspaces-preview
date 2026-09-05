@@ -4,17 +4,27 @@
   "name": "Workspaces Preview & Task Switcher",
   "version": "1.5.0",
   "author": "Alex Weström",
-  "description": "Omarchy workspaces widget with live hover preview and a visual hybrid Task Switcher (Super+Alt+W).",
+  "license": "MIT",
+  "description": "Omarchy workspaces widget with live hover preview and native macOS-style QuickSwitch task switcher with window previews.",
   "kinds": [
-    "bar-widget"
+    "bar-widget",
+    "service"
   ],
+  "keepLoaded": true,
   "entryPoints": {
-    "barWidget": "BarWidget.qml"
+    "barWidget": "BarWidget.qml",
+    "service": "Service.qml"
   },
   "barWidget": {
     "displayName": "Workspaces Preview",
     "description": "Shows workspaces with open window title preview on hover.",
     "category": "System",
+    "allowMultiple": false
+  },
+  "service": {
+    "displayName": "Task Switcher",
+    "description": "macOS-style task/window switcher with live window previews",
+    "category": "Desktop",
     "allowMultiple": false
   }
 }
