@@ -513,9 +513,12 @@ class HybridTaskSwitcher(QWidget):
         # Start selected at index 1 (MRU previous window) or 0
         self.selected_pos = 1 if len(self.windows) > 1 else 0
 
+        self._has_focused = False
         self.init_ui()
         self.position_on_screen()
         self.update_selection()
+        self.raise_()
+        self.activateWindow()
 
         # Start live thumbnail capture in background thread
         self.thumb_worker = ThumbnailWorker(self.windows)
@@ -529,9 +532,10 @@ class HybridTaskSwitcher(QWidget):
         super().closeEvent(event)
 
     def changeEvent(self, event):
-        # Auto-dismiss when window loses focus
         if event.type() == QEvent.Type.ActivationChange:
-            if not self.isActiveWindow():
+            if self.isActiveWindow():
+                self._has_focused = True
+            elif getattr(self, "_has_focused", False):
                 self.close()
         super().changeEvent(event)
 
