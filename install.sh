@@ -42,7 +42,7 @@ if ! grep -q "custom.workspaces" "$BINDINGS_FILE"; then
 
 -- macOS-style Task Switcher (custom.workspaces)
 hl.layer_rule({ match = { namespace = "custom.workspaces" }, no_anim = true })
-o.bind("SUPER + ALT + W", "Task switch", hl.dsp.global("custom.workspaces:next"), { repeating = true })
+o.bind("SUPER + ALT + W", "Task switch (persistent)", hl.dsp.global("custom.workspaces:toggle"))
 hl.unbind("SUPER + TAB")
 o.bind("SUPER + TAB", "Task switch", hl.dsp.global("custom.workspaces:next"), { repeating = true })
 BINDINGS_EOF

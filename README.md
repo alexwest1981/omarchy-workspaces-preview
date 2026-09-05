@@ -25,10 +25,10 @@ Detta skript fixar **allt automatiskt**:
 
 ## ⌨️ Användning
 
-- **Växla fönster:** Håll in <kbd>Super</kbd> och tryck <kbd>Tab</kbd> (eller tryck <kbd>Super</kbd> + <kbd>Alt</kbd> + <kbd>W</kbd>) för att stega mellan fönster.
-- **Välj fönster:** Släpp <kbd>Super</kbd> för att direkt hoppa till fönstret och dess workspace.
-- **Stäng app:** Tryck <kbd>Super</kbd> + <kbd>Q</kbd> medan switchern är öppen för att stänga den markerade appen.
-- **Musstyrning:** Håll musen över en miniatyr och klicka för att byta direkt.
+- **Snabbväxla appar (`Super + Tab`):** Håll in <kbd>Super</kbd> och tryck <kbd>Tab</kbd> för att stega mellan öppna appar. Släpp <kbd>Super</kbd> för att direkt byta fönster.
+- **Fönsteröversikt (`Super + Alt + W`):** Öppnar översikten i klickbart läge som stannar öppen tills du klickar på en app eller trycker <kbd>Enter</kbd> / <kbd>Escape</kbd>.
+- **Stäng app:** Tryck <kbd>Super</kbd> + <kbd>Q</kbd> (eller <kbd>Q</kbd>) medan översikten är öppen för att stänga den markerade appen direkt.
+- **Mus & tangentbord:** Klicka på valfritt fönster eller navigera med piltangenterna / Tab.
 
 ---
 

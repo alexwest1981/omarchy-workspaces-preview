@@ -13,6 +13,7 @@ Item {
     readonly property string shortAppId: "custom.workspaces"
 
     property bool open: false
+    property bool sticky: false
     property var windows: []
     property var groups: []
     property int selected: 0
@@ -23,8 +24,9 @@ Item {
     function next() { if (windows.length) selected = (selected + 1) % windows.length }
     function prev() { if (windows.length) selected = (selected + windows.length - 1) % windows.length }
 
-    function openSwitcher() {
-        console.log("[task-switch] openSwitcher called")
+    function openSwitcher(isSticky) {
+        console.log("[task-switch] openSwitcher called, sticky=", isSticky)
+        root.sticky = !!isSticky
         clientsProc.running = true
     }
 
@@ -76,7 +78,7 @@ Item {
         id: refreshAfterQuit
         interval: 220
         onTriggered: {
-            if (root.open) root.openSwitcher()
+            if (root.open) root.openSwitcher(root.sticky)
         }
     }
 
@@ -99,16 +101,52 @@ Item {
         }
     }
 
+    // Super+Tab (transient, auto-closes on release)
     GlobalShortcut {
         appid: root.shortAppId
         name: "next"
         onPressed: {
             if (root.open) {
-                root.sawKeyEvent = true
-                root.modsHeld = true
+                if (!root.sticky) {
+                    root.sawKeyEvent = true
+                    root.modsHeld = true
+                }
                 root.next()
             } else {
-                root.openSwitcher()
+                root.openSwitcher(false)
+            }
+        }
+    }
+
+    // Super+Alt+W (persistent/sticky, stays open until clicked or Enter/Escape)
+    GlobalShortcut {
+        appid: root.shortAppId
+        name: "toggle"
+        onPressed: {
+            if (root.open) {
+                if (root.sticky) {
+                    root.close(false)
+                } else {
+                    root.next()
+                }
+            } else {
+                root.openSwitcher(true)
+            }
+        }
+    }
+
+    GlobalShortcut {
+        appid: root.shortAppId
+        name: "picker"
+        onPressed: {
+            if (root.open) {
+                if (root.sticky) {
+                    root.close(false)
+                } else {
+                    root.next()
+                }
+            } else {
+                root.openSwitcher(true)
             }
         }
     }
@@ -165,7 +203,7 @@ Item {
 
         root.windows = records
         root.groups = Logic.groupByWorkspace(ordered)
-        root.selected = 0
+        root.selected = (root.sticky || records.length < 2) ? 0 : 1
         root.sawKeyEvent = false
         root.modsHeld = false
         root.open = true
@@ -198,8 +236,9 @@ Item {
                     id: noKeyTimer
                     interval: 150
                     repeat: true
-                    running: true
+                    running: !root.sticky
                     onTriggered: {
+                        if (root.sticky) return
                         if (root.sawKeyEvent) {
                             if (root.modsHeld) stop()
                             else panel.activate()
@@ -215,7 +254,7 @@ Item {
                         'error(tostring(hl.is_key_down("Super_L") or hl.is_key_down("Super_R")))']
                     stdout: StdioCollector {
                         onStreamFinished: {
-                            if (!root.open || root.sawKeyEvent) return
+                            if (!root.open || root.sticky || root.sawKeyEvent) return
                             if (!text.trim().endsWith("true"))
                                 panel.activate()
                         }
@@ -468,20 +507,22 @@ Item {
                     // release/noKeyTimer path would have already closed it), so
                     // mark the modifier as held for every key press.
                     Keys.onPressed: (event) => {
-                        root.sawKeyEvent = true
-                        root.modsHeld = true
+                        if (!root.sticky) {
+                            root.sawKeyEvent = true
+                            root.modsHeld = true
+                        }
                         if (event.key === Qt.Key_Escape) {
                             root.close(false)
                             event.accepted = true
                             return
                         }
-                        // SUPER+Q quits the highlighted app. Being inside the
-                        // exclusive grab already means SUPER is held, so don't
-                        // rely on event.modifiers (which isn't reliably set).
+                        // SUPER+Q or Q quits the highlighted app
                         if (event.key === Qt.Key_Q || event.key === Qt.Key_q) {
-                            root.quitSelected()
-                            event.accepted = true
-                            return
+                            if (!root.sticky || (event.modifiers & Qt.MetaModifier)) {
+                                root.quitSelected()
+                                event.accepted = true
+                                return
+                            }
                         }
                         if (event.key === Qt.Key_Tab || event.key === Qt.Key_Right || event.key === Qt.Key_Down) {
                             root.next()
@@ -489,13 +530,14 @@ Item {
                         } else if (event.key === Qt.Key_Backtab || event.key === Qt.Key_Left || event.key === Qt.Key_Up) {
                             root.prev()
                             event.accepted = true
-                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
                             panel.activate()
                             event.accepted = true
                         }
                     }
 
                     Keys.onReleased: (event) => {
+                        if (root.sticky) return
                         root.sawKeyEvent = true
                         const superReleasing = event.key === Qt.Key_Meta
                             || event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R
