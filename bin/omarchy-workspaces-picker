@@ -88,15 +88,19 @@ if [[ "${1:-}" == "--preview-card" ]]; then
   exit 0
 fi
 
+# Ensure PATH contains mise, uv, cargo, and local bins
+export PATH="$HOME/.local/share/mise/installs/uv/latest/.mise-bins:$HOME/.local/share/mise/shims:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:$PATH"
+
 # ------------------------------------------------------------------------------
-# 2. Main Launcher (Visual macOS Task Switcher / TUI Fallback)
+# 2. Main Launcher (Visual Task Switcher / TUI Fallback)
 # ------------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Launch Visual macOS Task Switcher by default
+# Launch Visual Task Switcher by default
 if [[ "${1:-}" != "--tui" ]]; then
-  if command -v uv >/dev/null 2>&1 && [[ -f "$SCRIPT_DIR/omarchy-task-switcher.py" ]]; then
-    exec uv run --with PyQt6 python "$SCRIPT_DIR/omarchy-task-switcher.py" "$@"
+  UV_CMD="$(command -v uv || echo "$HOME/.local/share/mise/installs/uv/latest/.mise-bins/uv")"
+  if [[ -x "$UV_CMD" && -f "$SCRIPT_DIR/omarchy-task-switcher.py" ]]; then
+    exec "$UV_CMD" run --with PyQt6 python "$SCRIPT_DIR/omarchy-task-switcher.py" "$@"
   fi
 else
   shift

@@ -6,7 +6,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "inkedalex.workspaces-preview"
+  moduleName: "custom.workspaces"
 
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
@@ -87,9 +87,8 @@ BarWidget {
         readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
 
         bar: root.bar
-        text: modelData === 10 ? "0" : String(modelData)
-        active: focused
-        opacity: focused ? 1.0 : (occupied ? 0.85 : 0.4)
+        text: focused ? "\uDB85\uDCFB" : (modelData === 10 ? "0" : String(modelData))
+        opacity: occupied || focused ? 1 : 0.5
         horizontalMargin: 6
         verticalPadding: 6
         fixedWidth: root.vertical ? root.barSize : Style.space(20)

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "inkedalex.workspaces-preview",
+  "id": "custom.workspaces",
   "name": "Workspaces Preview & Task Switcher",
   "version": "1.5.0",
   "author": "Alex Weström",
-  "description": "Omarchy workspaces widget with live hover preview and a visual macOS-style Task Switcher (Super+Alt+W).",
+  "description": "Omarchy workspaces widget with live hover preview and a visual hybrid Task Switcher (Super+Alt+W).",
   "kinds": [
     "bar-widget"
   ],
