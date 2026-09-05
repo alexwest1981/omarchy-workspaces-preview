@@ -1,26 +1,36 @@
-# Omarchy Workspaces Preview Plugin 🖥️
+# Omarchy Workspaces Preview & Visual Task Switcher 🖥️✨
 
-A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprland** featuring both a live **status bar hover preview** and a **keyboard-first global window picker**.
+A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprland** featuring:
+1. 🖱️ **Live Status Bar Hover Preview**
+2. 🪟 **macOS-Style Visual Task Switcher (`Super + Alt + W`)** with large app icons and MRU cycling
+3. ⌨️ **TUI Window Picker fallback (`--tui`)**
 
 ![Workspaces Preview](https://raw.githubusercontent.com/alexwest1981/omarchy-workspaces-preview/main/screenshot.png)
 
 ## ✨ Features
 
-### 🖱️ 1. Status Bar Hover Preview
+### 🪟 1. macOS-Style Visual Task Switcher (`Super + Alt + W`)
+* **Glassmorphic HUD:** A floating frosted acrylic window centered on your active monitor.
+* **Large App Icons & Number Badges:** High-resolution icons with quick-jump numbers (`1`–`9`).
+* **MRU Window Ordering:** Pressing `Super+Alt+W` instantly highlights the previously active app, exactly like macOS / Alt-Tab.
+* **Live Search & Fuzzy Filtering:** Start typing to instantly filter open applications.
+* **Workspace & Monitor Badges:** Clear pill badges showing exactly which workspace and screen each window lives on.
+* **Smart Actions:**
+  * `Tab` / `Shift+Tab` / `←` `→` ➜ Cycle windows
+  * `Enter` / Click ➜ Focus window & switch workspace
+  * `Ctrl + N` ➜ Move window to next free workspace on active monitor
+  * `Ctrl + K` ➜ Kill/close window
+  * `Ctrl + M` ➜ Bring window to current workspace
+  * `Esc` ➜ Dismiss switcher
+
+### 🖱️ 2. Status Bar Hover Preview
 * **Instant inspection:** Move your mouse over any workspace number on the top bar to immediately see all active window titles and applications.
 * **Smart Detection:** Distinguishes occupied, empty, and currently focused workspaces.
 * **Native Integration:** Built with Quickshell's Hyprland IPC layer, perfectly matching Omarchy's theme.
 
-### ⌨️ 2. Global Keyboard-First Window Picker (Modern TUI Pro)
-* **Fuzzy search across all workspaces:** Jump directly to any open window in seconds (`type` → `Enter`).
-* **Live Window Inspector (Split View):** Real-time dashboard card showing window title, process ID, workspace badge, active monitor detection, next free workspace, geometry, and address.
-* **Auto-Workspace Switching:** Instantly switches to the target workspace and brings the selected window into focus.
-* **Multi-Monitor & Smart Workspace Allocation:** Automatically finds the next available free workspace on your currently focused monitor (e.g. AOC, BenQ, HP).
-* **Window Management Actions:**
-  * `Enter` ➜ Jump & focus window *(or open in new workspace if New WS mode is ON)*
-  * `Ctrl + N` ➜ **Instant Open in New Free Workspace** on active screen
-  * `Ctrl + K` ➜ Instantly kill/close selected window
-  * `Ctrl + M` ➜ Bring selected window to active workspace
+### ⌨️ 3. Global Keyboard-First TUI Mode (`omarchy-workspaces-picker --tui`)
+* Terminal-based fzf picker for power users.
+* Real-time split-view inspector card.
 
 ![Window Picker](https://raw.githubusercontent.com/alexwest1981/omarchy-workspaces-preview/main/picker-screenshot.png)
 

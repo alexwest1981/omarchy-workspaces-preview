@@ -89,8 +89,19 @@ if [[ "${1:-}" == "--preview-card" ]]; then
 fi
 
 # ------------------------------------------------------------------------------
-# 2. Main Launcher & Floating TUI Shell
+# 2. Main Launcher (Visual macOS Task Switcher / TUI Fallback)
 # ------------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Launch Visual macOS Task Switcher by default
+if [[ "${1:-}" != "--tui" ]]; then
+  if command -v uv >/dev/null 2>&1 && [[ -f "$SCRIPT_DIR/omarchy-task-switcher.py" ]]; then
+    exec uv run --with PyQt6 python "$SCRIPT_DIR/omarchy-task-switcher.py" "$@"
+  fi
+else
+  shift
+fi
+
 if [ ! -t 0 ]; then
   exec omarchy-launch-tui --app-id=TUI.float "$0" "$@"
 fi
