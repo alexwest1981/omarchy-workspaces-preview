@@ -1,61 +1,39 @@
-# Omarchy Workspaces Preview & Visual Task Switcher 🖥️✨
+# Omarchy Workspaces Preview & Native Task Switcher 🖥️✨
 
 A powerful and elegant plugin for **[Omarchy](https://omarchy.org)** / **Hyprland** featuring:
-1. 🖱️ **Live Status Bar Hover Preview**
-2. 🪟 **macOS-Style Visual Task Switcher (`Super + Alt + W`)** with large app icons and MRU cycling
-3. ⌨️ **TUI Window Picker fallback (`--tui`)**
-
-![Workspaces Preview](https://raw.githubusercontent.com/alexwest1981/omarchy-workspaces-preview/main/screenshot.png)
-
-## ✨ Features
-
-### 🪟 1. macOS-Style Visual Task Switcher (`Super + Alt + W`)
-* **Glassmorphic HUD:** A floating frosted acrylic window centered on your active monitor.
-* **Large App Icons & Number Badges:** High-resolution icons with quick-jump numbers (`1`–`9`).
-* **MRU Window Ordering:** Pressing `Super+Alt+W` instantly highlights the previously active app, exactly like macOS / Alt-Tab.
-* **Live Search & Fuzzy Filtering:** Start typing to instantly filter open applications.
-* **Workspace & Monitor Badges:** Clear pill badges showing exactly which workspace and screen each window lives on.
-* **Smart Actions:**
-  * `Tab` / `Shift+Tab` / `←` `→` ➜ Cycle windows
-  * `Enter` / Click ➜ Focus window & switch workspace
-  * `Ctrl + N` ➜ Move window to next free workspace on active monitor
-  * `Ctrl + K` ➜ Kill/close window
-  * `Ctrl + M` ➜ Bring window to current workspace
-  * `Esc` ➜ Dismiss switcher
-
-### 🖱️ 2. Status Bar Hover Preview
-* **Instant inspection:** Move your mouse over any workspace number on the top bar to immediately see all active window titles and applications.
-* **Smart Detection:** Distinguishes occupied, empty, and currently focused workspaces.
-* **Native Integration:** Built with Quickshell's Hyprland IPC layer, perfectly matching Omarchy's theme.
-
-### ⌨️ 3. Global Keyboard-First TUI Mode (`omarchy-workspaces-picker --tui`)
-* Terminal-based fzf picker for power users.
-* Real-time split-view inspector card.
-
-![Window Picker](https://raw.githubusercontent.com/alexwest1981/omarchy-workspaces-preview/main/picker-screenshot.png)
-
-### 🎨 3. Live Bottom Customizer Menu
-Customizable directly from the bottom footer of the window picker without leaving the app:
-* `Ctrl + T` – **Theme:** *Based on System (Auto)*, *Tokyo Night*, *Catppuccin Mocha*, *Nord*, *Gruvbox*, *Cyberpunk*, *Monochrome*.
-* `Ctrl + B` – **Borders & Corners:** *Rounded*, *Sharp*, *Double*, *Bold*, *None*.
-* `Ctrl + S` – **View Mode:** *Split View*, *Wide View*, *List Only (Compact)*.
-* `Ctrl + W` – **New WS Mode (Toggle):** *ON / OFF* (When ON, `Enter` automatically moves the window to a fresh workspace on the active monitor).
-
-Preferences are automatically remembered in `~/.config/omarchy/workspaces-picker.json`.
+1. 🖱️ **Status Bar Workspace Indicator & Hover Preview**
+2. 🪟 **macOS-Style Live Window Task Switcher (`Super + Tab` / `Super + Alt + W`)** with live screencopy previews, app icons, and workspace info.
+3. ⌨️ **Terminal TUI Mode fallback (`omarchy-workspaces-picker --tui`)**
 
 ---
 
-## 📦 Installation
+## 🚀 Installationsinstruktioner (Snabbt & Enkelt)
 
-Clone this repository into your Omarchy plugins directory:
+Ge dessa enkla steg till din kompis:
 
+### Steg 1: Klona pluginet
+Kör i terminalen:
 ```bash
-git clone https://github.com/alexwest1981/omarchy-workspaces-preview.git ~/.config/omarchy/plugins/inkedalex.workspaces-preview
+git clone https://github.com/alexwest1981/omarchy-workspaces-preview.git ~/.config/omarchy/plugins/custom.workspaces
 ```
 
-### 1. Enable Status Bar Widget in `~/.config/omarchy/shell.json`
+---
 
-Replace `omarchy.workspaces` in your `bar.layout.left` with `inkedalex.workspaces-preview`:
+### Steg 2: Lägg till kortkommandon
+Öppna `~/.config/hypr/bindings.lua` och klistra in följande längst ner:
+
+```lua
+-- macOS-style Task Switcher med fönster-previews
+hl.layer_rule({ match = { namespace = "custom.workspaces" }, no_anim = true })
+o.bind("SUPER + ALT + W", "Task switch", hl.dsp.global("custom.workspaces:next"), { repeating = true })
+hl.unbind("SUPER + TAB")
+o.bind("SUPER + TAB", "Task switch", hl.dsp.global("custom.workspaces:next"), { repeating = true })
+```
+
+---
+
+### Steg 3: Aktivera i panelen (`~/.config/omarchy/config.json`)
+I `~/.config/omarchy/config.json`, se till att `custom.workspaces` finns med i `bar.layout.left` och under `plugins`:
 
 ```json
 {
@@ -63,41 +41,35 @@ Replace `omarchy.workspaces` in your `bar.layout.left` with `inkedalex.workspace
     "layout": {
       "left": [
         { "id": "omarchy.menu" },
-        { "id": "inkedalex.workspaces-preview" }
+        { "id": "custom.workspaces" }
       ]
     }
   },
   "plugins": [
-    { "id": "inkedalex.workspaces-preview" }
+    { "id": "custom.workspaces" }
   ]
 }
 ```
 
-The shell will hot-reload automatically upon saving!
-
 ---
 
-### 2. Enable Keyboard Shortcut for Window Picker
-
-Symlink the picker script into your PATH:
+### Steg 4: Starta om och njut! 🎉
+Kör detta i terminalen för att ladda ändringarna direkt:
 
 ```bash
-ln -sf ~/.config/omarchy/plugins/inkedalex.workspaces-preview/bin/omarchy-workspaces-picker ~/.local/bin/omarchy-workspaces-picker
-```
-
-Add your preferred shortcut in `~/.config/hypr/bindings.lua`:
-
-```lua
--- Option A: Super + Alt + W
-o.bind("SUPER + ALT + W", "Window picker", "omarchy-workspaces-picker")
-
--- Option B: Super + W (overriding default close-window)
--- hl.unbind("SUPER + W")
--- o.bind("SUPER + W", "Window picker", "omarchy-workspaces-picker")
+omarchy-restart-shell && hyprctl reload
 ```
 
 ---
 
-## 📄 License
-MIT License © 2026 Alex Weström
+## ⌨️ Användning
 
+- **Växla fönster:** Håll in <kbd>Super</kbd> och tryck <kbd>Tab</kbd> (eller tryck <kbd>Super</kbd> + <kbd>Alt</kbd> + <kbd>W</kbd>) för att stega mellan fönster.
+- **Välj fönster:** Släpp <kbd>Super</kbd> för att direkt hoppa till fönstret och dess workspace.
+- **Stäng fönster:** Tryck <kbd>Super</kbd> + <kbd>Q</kbd> medan switchern är öppen för att stänga den markerade appen.
+- **Musstyrning:** Håll musen över en miniatyr och klicka för att byta direkt.
+
+---
+
+## 📄 Licens
+MIT License © 2026 Alex Weström
